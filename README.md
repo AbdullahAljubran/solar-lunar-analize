@@ -1,4 +1,4 @@
-# solar-lunar-analize
+# solar-lunar-analyse
 A Streamlit-based interactive dashboard for exploring solar eclipse data from 2000 BCE to 3000 CE using a geospatial interface and filtered visualizations.
 
 # About the Dataset
