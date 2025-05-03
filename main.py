@@ -1,81 +1,66 @@
-import pandas as pd
 import streamlit as st
-import plotly.express as px
-from astropy.time import Time 
-#from astropy.coordinates import get_moon
-from astropy.coordinates import get_body
-from astropy.time import Time
+import geopandas as gpd
+from solar_analysis import load_solar_data
+import pandas as pd
 
-time = Time.now()  # الوقت الحالي أو أي وقت تريده
-moon = get_body('moon', time)  # احصل على موقع القمر
+st.set_page_config(page_title="Solar Eclipse Explorer", layout="wide")
 
-from sklearn.ensemble import RandomForestClassifier
-from solar_analysis import load_solar_data  # This is our cleaned version
+st.title("🌘 Solar Eclipse Explorer Dashboard")
 
-st.set_page_config(layout="wide")
+# Load and cache data
+@st.cache_data
+def load_data():
+    return load_solar_data()
 
-st.title("🌞 Solar Eclipse Explorer")
+df = load_data()
 
-# Load cleaned and processed data
-df = load_solar_data()
+# Sidebar filters
+st.sidebar.header("🔍 Filter Options")
 
-# 🌍 A. Eclipse Path Map
-fig_map = px.scatter_geo(
-    df,
-    lat='lat',
-    lon='lon',
-    color='Eclipse-Type',
-    hover_name='Calendar-Date',
-    projection='natural earth',
-    title='Solar Eclipse Paths (2000 BCE - 3000 CE)'
-)
-st.plotly_chart(fig_map, use_container_width=True)
+era = st.sidebar.selectbox("Select Era", ["CE", "BCE"])
+year = st.sidebar.number_input("Select Year", min_value=-3000, max_value=3000, value=2000, step=1)
 
-# 📊 B. Saros Cycle Analysis
-fig_saros = px.line(
-    df.groupby('Saros-Number').agg({'Eclipse-Magnitude': 'mean'}).reset_index(),
-    x='Saros-Number',
-    y='Eclipse-Magnitude',
-    title='Average Eclipse Magnitude by Saros Cycle'
-)
-st.plotly_chart(fig_saros)
+# Apply filters
+is_ce = era.upper() == 'CE'
+filtered_df = df[df['Year'].notna() & (df['Is_CE'] == is_ce) & (df['Year'] == year)]
 
-# ⏳ C. Century Timeline
-century = df['Calendar-Date-Parsed'].dropna().dt.year // 100 * 100
-df['Century'] = century
-fig_timeline = px.histogram(
-    df,
-    x='Century',
-    color='Eclipse-Type',
-    barmode='stack',
-    title='Eclipse Frequency by Century'
-)
-st.plotly_chart(fig_timeline)
+# Display results
+if filtered_df.empty:
+    st.warning(f"No eclipse events found for year {year} {era}.")
+else:
+    st.success(f"{len(filtered_df)} eclipse events found for year {year} {era}.")
 
-# 🌙 D. Moon Phase
-st.subheader("Moon Phase on Eclipse Date")
-date = st.date_input('Select eclipse date')
-moon_phase = get_moon(Time(str(date))).phase
-st.metric("Moon Phase", f"{moon_phase:.0%} illuminated")
+    # Display map
+    st.map(filtered_df)
 
-# 🤖 E. Eclipse Type Predictor
-st.subheader("Eclipse Type Predictor (by Location)")
-model = RandomForestClassifier()
-model.fit(df[['lat', 'lon']], df['Eclipse-Type'])
-user_lat = st.number_input('Latitude')
-user_lon = st.number_input('Longitude')
-if user_lat and user_lon:
-    prediction = model.predict([[user_lat, user_lon]])[0]
-    st.write(f"Predicted eclipse type: **{prediction}**")
+    # Show eclipse data table
+    st.dataframe(filtered_df[[
+        "Calendar-Date", "Eclipse-Type", "Eclipse-Magnitude", "Central-Duration",
+        "Path-Width(km)", "Latitude", "Longitude", "Gamma"
+    ]])
 
-# 🌌 Styling
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] {
-    background: url('https://www.nasa.gov/wp-content/uploads/2023/09/solar-eclipse-2017.jpg');
-    background-size: cover;
-    background-attachment: fixed;
-}
-.st-bw { background-color: rgba(0,0,0,0.7) !important; }
-</style>
-""", unsafe_allow_html=True)
+    # Additional visualizations
+    st.subheader("📊 Eclipse Type Distribution")
+    eclipse_type_counts = filtered_df['Eclipse-Type'].value_counts()
+    st.bar_chart(eclipse_type_counts)
+
+    st.subheader("☀️ Eclipse Magnitude Distribution")
+    st.line_chart(filtered_df[['Eclipse-Magnitude']].astype(float))
+    
+    # 🌐 Gamma value distribution
+    st.subheader("🌐 Gamma Value Distribution")
+    gamma_values = pd.to_numeric(filtered_df['Gamma'], errors='coerce').dropna()
+    if not gamma_values.empty:
+        st.line_chart(gamma_values)
+    else:
+        st.info("No valid Gamma data available.")
+
+    st.subheader("📍 Path Width Distribution (if available)")
+    valid_widths = pd.to_numeric(filtered_df['Path-Width(km)'], errors='coerce').dropna()
+    if not valid_widths.empty:
+        st.area_chart(valid_widths)
+    else:
+        st.info("No valid path width data available.")
+        
+        
+    
