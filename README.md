@@ -38,3 +38,5 @@ Gamma value trends
 
 Path width analysis
 
+check it out:
+https://solar-lunar-eda.streamlit.app/
